@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pedidos - Dono da Loja</title>
+    <link rel="stylesheet" href="index.css">
+</head>
+<body>
+    <header>
+        <h1>Visualizar Pedidos</h1>
+        <p>Bem-vindo, dono da loja! Aqui estão todos os pedidos realizados.</p>
+    </header>
+
+    <nav>
+        <button onclick="mostrarPedidos('pendente')">Pedidos Pendentes</button>
+        <button onclick="mostrarPedidos('finalizado')">Pedidos Finalizados</button>
+    </nav>
+
+    <section id="pedidosPendente" class="pedidos-tabela" style="display: block;">
+        <h2>Pedidos Pendentes</h2>
+        <div id="loadingPendentes" class="loading" style="display:none;">Carregando...</div>
+        <table id="pedidosTablePendentes" style="display:none;">
+            <thead>
+                <tr>
+                    <th>Nome do Cliente</th>
+                    <th>Item do Pedido</th>
+                    <th>Forma de Pagamento</th>
+                    <th>Data e Hoarario</th>
+                    <th>Ações</th>
+                </tr>
+            </thead>
+            <tbody id="pedidosListPendentes">
+                </tbody>
+        </table>
+    </section>
+
+    <section id="pedidosFinalizado" class="pedidos-tabela" style="display: none;">
+        <h2>Pedidos Finalizados</h2>
+        <div id="loadingFinalizados" class="loading" style="display:none;">Carregando...</div>
+        <table id="pedidosTableFinalizados" style="display:none;">
+            <thead>
+                <tr>
+                    <th>Nome do Cliente</th>
+                    <th>Item do Pedido</th>
+                    <th>Forma de Pagamento</th>
+                    <th>Data e Hoarario</th>
+                </tr>
+            </thead>
+            <tbody id="pedidosListFinalizados">
+                </tbody>
+        </table>
+    </section>
+
+    <script>
+       document.addEventListener('DOMContentLoaded', function() {
+    mostrarPedidos('pendente'); // Carrega os pedidos pendentes ao carregar a página
+});
+
+function mostrarPedidos(tipo) {
+    if (tipo === 'pendente') {
+        document.getElementById('pedidosPendente').style.display = 'block';
+        document.getElementById('pedidosFinalizado').style.display = 'none';
+        buscarPedidos('pendente'); // Passando o status como Pendente
+    } else {
+        document.getElementById('pedidosPendente').style.display = 'none';
+        document.getElementById('pedidosFinalizado').style.display = 'block';
+        buscarPedidos('Finalizado'); // Passando o status como Finalizado
+    }
+}
+
+function buscarPedidos(status) {
+    const pedidosList = status === 'pendente' ? document.getElementById('pedidosListPendentes') : document.getElementById('pedidosListFinalizados');
+    const pedidosTable = status === 'pendente' ? document.getElementById('pedidosTablePendentes') : document.getElementById('pedidosTableFinalizados');
+    const loadingElement = status === 'pendente' ? document.getElementById('loadingPendentes') : document.getElementById('loadingFinalizados');
+
+    pedidosList.innerHTML = '';
+    pedidosTable.style.display = 'none';
+
+    if (loadingElement) {
+        loadingElement.style.display = 'block';
+    }
+
+    // Certifique-se de que a URL está correta
+    fetch(`http://localhost:8080/getPedidos?status=${status}`)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`Erro ao buscar pedidos (status ${response.status}): ${response.statusText}`);
+            }
+            return response.json();
+        })
+        .then(pedidos => {
+            if (loadingElement) {
+                loadingElement.style.display = 'none';
+            }
+            if (pedidos && pedidos.length > 0) {
+                popularTabela(pedidos, pedidosList, status);
+                pedidosTable.style.display = 'table';
+            } else {
+                pedidosList.innerHTML = '<tr><td colspan="4" style="text-align: center;">Nenhum pedido encontrado.</td></tr>';
+                pedidosTable.style.display = 'table';
+            }
+        })
+        .catch(error => {
+            if (loadingElement) {
+                loadingElement.style.display = 'none';
+            }
+            console.error('Erro ao buscar pedidos:', error);
+            alert('Erro ao carregar pedidos: ' + error.message);
+        });
+}
+
+function popularTabela(pedidos, tabela, status) {
+    tabela.innerHTML = '';
+    pedidos.forEach(pedido => {
+        const row = document.createElement('tr');
+        row.setAttribute('data-pedido-id', parseInt(pedido.idpedido)); 
+
+        row.innerHTML = `
+            <td>${pedido.nome || 'Nome não informado'}</td>
+            <td>${pedido.intemPedido || 'Item não informado'}</td>
+            <td>${pedido.formaDepagamneto || 'Pagamento não informado'}</td>
+             <td>${pedido.dataHoraRecebimento || 'data não informado'}</td>
+            ${status === 'pendente' ? `
+                <td>
+                    <button class="finalizar" onclick="finalizarPedido(${pedido.idpedido})">Finalizar</button>
+                    <button class="cancelar" onclick="cancelarPedido(${pedido.idpedido})">Cancelar</button>
+                </td>` : ''}
+        `;
+        tabela.appendChild(row);
+    });
+}
+
+function finalizarPedido(pedidoId) {
+    fetch(`http://localhost:8080/api/pedidos/${pedidoId}/finalizar`, { method: 'POST' })
+        .then(response => {
+            if (!response.ok) {
+                return response.text().then(text => {throw new Error(`Erro ao finalizar pedido (status ${response.status}): ${text}`)});
+            }
+            return response.json();
+        })
+        .then(pedidoFinalizado => {
+            alert(`Pedido ${pedidoId} finalizado!`);
+            // Remove da tabela de pedidos pendentes
+            const pedidosPendentes = document.getElementById('pedidosListPendentes');
+            const pedidoElemento = pedidosPendentes.querySelector(`tr[data-pedido-id="${parseInt(pedidoId)}"]`);
+            if (pedidoElemento) {
+                pedidosPendentes.removeChild(pedidoElemento);
+            }
+            // Atualiza a tabela de pedidos finalizados
+            buscarPedidos('Finalizado'); // Recarrega apenas a tabela de finalizados
+        })
+        .catch(error => {
+            console.error('Erro ao finalizar pedido:', error);
+            alert('Erro ao finalizar pedido: ' + error.message);
+        });
+}
+
+function cancelarPedido(pedidoId) {
+    fetch(`http://localhost:8080/api/pedidos/${pedidoId}/cancelar`, { method: 'POST' })
+        .then(response => {
+            if (response.ok) {
+                alert(`Pedido ${pedidoId} cancelado!`);
+                const pedidosPendentes = document.getElementById('pedidosListPendentes');
+                const pedidoElemento = pedidosPendentes.querySelector(`tr[data-pedido-id="${parseInt(pedidoId)}"]`);
+                if (pedidoElemento) {
+                    pedidosPendentes.removeChild(pedidoElemento);
+                }
+            } else {
+                alert('Erro ao cancelar pedido!');
+            }
+        })
+        .catch(error => {
+            console.error('Erro ao cancelar pedido:', error);
+            alert('Erro ao cancelar pedido!');
+        });
+}
+
+    </script>
+</body>
+</html>
